@@ -27,17 +27,21 @@ def delete_profile(
         select(Watchlist).where(Watchlist.owner_id == profile_id)
     ).all()
 
+    # Same fix as delete_watchlist: flush() between tiers gets the delete
+    # order right (items, then watchlists, then the profile itself) while
+    # keeping everything in ONE transaction - a single commit() at the end
+    # means the whole cascade succeeds or rolls back together, not partially.
     for wl in watchlists:
         items = session.exec(
             select(WatchlistItem).where(WatchlistItem.watchlist_id == wl.id)
         ).all()
         for item in items:
             session.delete(item)
-    session.commit()
+    session.flush()
 
     for wl in watchlists:
         session.delete(wl)
-    session.commit()
+    session.flush()
 
     session.delete(profile)
     session.commit()

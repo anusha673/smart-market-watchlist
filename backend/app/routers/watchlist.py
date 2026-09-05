@@ -56,16 +56,20 @@ def delete_watchlist(
 ):
     wl = _get_owned_watchlist(watchlist_id, profile_id, session)
 
-    # Separate commit for the items before the parent watchlist row - see
-    # the long-form note on this in an earlier version of this function;
-    # Postgres will reject deleting the parent first without an explicit
-    # ORM relationship telling SQLAlchemy the dependency order.
+    # flush() sends the DELETE statements to Postgres in the order we choose,
+    # but still inside the SAME transaction as the parent delete below - one
+    # commit() at the end means both succeed or both roll back together.
+    # An earlier version of this used two separate commit() calls, which
+    # respected the child-before-parent ordering Postgres requires but was
+    # NOT actually atomic: a crash between the two commits could leave items
+    # deleted with the parent watchlist still orphaned. flush() gets the
+    # ordering right without giving up atomicity.
     items = session.exec(
         select(WatchlistItem).where(WatchlistItem.watchlist_id == watchlist_id)
     ).all()
     for item in items:
         session.delete(item)
-    session.commit()
+    session.flush()
 
     session.delete(wl)
     session.commit()
