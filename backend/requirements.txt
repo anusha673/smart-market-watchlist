@@ -1,0 +1,9 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+sqlmodel==0.0.22
+psycopg2-binary==2.9.9
+redis==5.0.8
+apscheduler==3.10.4
+yfinance==0.2.43
+python-dotenv==1.0.1
+pyjwt==2.9.0

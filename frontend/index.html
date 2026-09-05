@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Watchlist</title>
+<style>
+  :root {
+    --bg: #0A1210;
+    --panel: #101B17;
+    --line: #1E2E27;
+    --text: #EAF3EE;
+    --muted: #6B8478;
+    --up: #00D8A3;
+    --down: #FF6B5E;
+    --stale: #F0A94E;
+    --delayed: #F0A94E;
+    --volume: #8B7FFF;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(ellipse 900px 300px at 50% -10%, rgba(0,216,163,0.08), transparent),
+      var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    padding: 32px 20px 80px;
+  }
+  .wrap { max-width: 700px; margin: 0 auto; }
+  h1 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    margin: 0 0 6px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+  .live-pulse {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--up);
+    box-shadow: 0 0 0 0 rgba(0,216,163,0.6);
+    animation: pulse 2.2s ease-out infinite;
+    flex-shrink: 0;
+  }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(0,216,163,0.5); }
+    70% { box-shadow: 0 0 0 8px rgba(0,216,163,0); }
+    100% { box-shadow: 0 0 0 0 rgba(0,216,163,0); }
+  }
+  .sub { font-size: 13px; color: var(--muted); margin: 0 0 28px; }
+
+  form { display: flex; gap: 8px; margin-bottom: 24px; }
+  input[type="text"], input[type="password"] {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--text);
+    padding: 10px 12px;
+    font-size: 14px;
+    border-radius: 6px;
+  }
+  input:focus { outline: none; border-color: var(--up); }
+  button {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--text);
+    padding: 10px 16px;
+    font-size: 13px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+  }
+  button:hover { border-color: var(--up); }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--muted);
+    text-transform: lowercase;
+    padding: 0 0 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  thead th.num, tbody td.num { text-align: right; }
+  tbody td { padding: 16px 0 16px 14px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  tbody tr.toggle-row { border-left: 3px solid transparent; }
+  .symbol { font-weight: 500; }
+  .price, .delta { font-family: "SF Mono", "Roboto Mono", monospace; font-size: 16px; font-weight: 500; }
+  .delta { font-size: 14px; font-weight: 400; }
+  .delta.up { color: var(--up); }
+  .delta.down { color: var(--down); }
+  .flag {
+    display: inline-block;
+    margin-left: 8px;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    vertical-align: middle;
+    font-weight: 500;
+  }
+  .flag.meaningful { background: rgba(0,216,163,0.14); color: var(--up); }
+  .flag.stale { background: rgba(240,169,78,0.14); color: var(--stale); }
+  .flag.volume { background: rgba(139,127,255,0.16); color: var(--volume); }
+  .flag.prevclose { background: rgba(255,107,94,0.14); color: var(--down); }
+  .freshness-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
+  .freshness-dot.live { background: var(--up); }
+  .freshness-dot.delayed { background: var(--delayed); }
+  .freshness-dot.stale { background: var(--down); }
+  .detail-row td { padding: 0 0 20px 14px; border-bottom: 1px solid var(--line); }
+  .detail-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px 24px; margin-top: 4px; }
+  .detail-item .label { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+  .detail-item .value { font-family: "SF Mono", "Roboto Mono", monospace; font-size: 13px; }
+  .detail-item .value.dim { color: var(--muted); }
+  .triggers { margin-top: 14px; font-size: 12px; color: var(--muted); }
+  .triggers .trigger-item { color: var(--text); margin-top: 4px; }
+  .sparkline-wrap { margin-top: 14px; }
+  .toggle-row { cursor: pointer; transition: border-left-color 0.2s ease; }
+  .toggle-row:hover { background: rgba(255,255,255,0.02); }
+  .notif-banner { font-size: 12px; color: var(--stale); margin: 0 0 16px; display: none; }
+  .notif-banner button { padding: 4px 10px; font-size: 11px; margin-left: 8px; }
+  .tabs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 20px; }
+  .tab {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--panel); border: 1px solid var(--line); color: var(--muted);
+    padding: 7px 12px; font-size: 13px; border-radius: 6px; cursor: pointer;
+  }
+  .tab.active { color: var(--text); border-color: var(--up); background: rgba(0,216,163,0.08); }
+  .tab .tab-delete { color: var(--muted); font-size: 11px; padding: 0 2px; }
+  .tab .tab-delete:hover { color: var(--down); }
+  .tab-add {
+    background: none; border: 1px dashed var(--line); color: var(--muted);
+    padding: 7px 12px; font-size: 13px; border-radius: 6px; cursor: pointer;
+  }
+  .sort-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .sort-bar span { font-size: 11px; color: var(--muted); }
+  .sort-btn {
+    background: var(--panel); border: 1px solid var(--line); color: var(--muted);
+    padding: 5px 10px; font-size: 12px; border-radius: 5px; cursor: pointer;
+  }
+  .sort-btn.active { color: var(--text); border-color: var(--up); background: rgba(0,216,163,0.08); }
+  .axis-label { font-family: "SF Mono", "Roboto Mono", monospace; font-size: 9px; fill: var(--muted); }
+  .remove-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 2px 6px; }
+  .remove-btn:hover { color: var(--down); }
+  .empty { color: var(--muted); font-size: 13px; padding: 24px 0; }
+  .status { font-size: 12px; color: var(--muted); margin-top: 20px; }
+
+  .account-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; font-size: 12px; color: var(--muted); }
+  .account-bar .logout-link { cursor: pointer; text-decoration: underline; }
+
+  #auth-gate { max-width: 340px; margin: 100px auto; }
+  #auth-gate h1 { font-size: 20px; color: var(--text); margin-bottom: 20px; }
+  #auth-gate form { flex-direction: column; }
+  #auth-gate button[type="submit"] { margin-top: 4px; background: var(--up); color: #062A20; border-color: var(--up); font-weight: 600; }
+  #auth-gate button[type="submit"]:hover { border-color: var(--up); opacity: 0.9; }
+  .auth-error { color: var(--down); font-size: 12px; margin: -8px 0 12px; min-height: 14px; }
+  .auth-toggle { font-size: 12px; color: var(--muted); text-align: center; }
+  .auth-toggle a { color: var(--text); cursor: pointer; text-decoration: underline; }
+  #app-content { display: none; }
+</style>
+</head>
+<body>
+
+  <div id="auth-gate">
+    <h1 id="auth-title">Log in</h1>
+    <form id="auth-form">
+      <input type="text" id="auth-name" placeholder="Name" autocomplete="username" required />
+      <input type="password" id="auth-password" placeholder="Password" autocomplete="current-password" required />
+      <button type="submit" id="auth-submit-btn">Log in</button>
+    </form>
+    <p class="auth-error" id="auth-error"></p>
+    <p class="auth-toggle" id="auth-toggle">
+      Don't have an account? <a id="auth-toggle-link">Register</a>
+    </p>
+  </div>
+
+  <div class="wrap" id="app-content">
+    <div class="account-bar">
+      <span id="account-name"></span>
+      <span class="logout-link" id="logout-link">Log out</span>
+    </div>
+
+    <h1><span class="live-pulse"></span>Watchlist</h1>
+    <p class="sub" id="sub">Loading&hellip;</p>
+    <p class="notif-banner" id="notif-banner">
+      Enable notifications for meaningful price moves
+      <button id="notif-enable-btn">Enable</button>
+    </p>
+
+    <div class="sort-bar"><span>watchlist:</span></div>
+    <div class="tabs" id="tabs"></div>
+
+    <div class="sort-bar">
+      <span>sort:</span>
+      <button class="sort-btn" id="sort-alpha" data-sort="alpha">A–Z</button>
+      <button class="sort-btn" id="sort-change" data-sort="change">Attention score</button>
+    </div>
+
+    <form id="add-form">
+      <input type="text" id="symbol-input" placeholder="Symbol, e.g. RELIANCE.NS or TCS.NS" autocomplete="off" />
+      <button type="submit">Add</button>
+    </form>
+
+    <table>
+      <thead>
+        <tr>
+          <th>symbol</th>
+          <th class="num">price</th>
+          <th class="num">since last view</th>
+          <th></th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty-msg" style="display:none">No symbols yet — add one above.</div>
+
+    <p class="status" id="status"></p>
+  </div>
+
+<script>
+  const API_BASE = "http://localhost:8000";
+  const REFRESH_MS = 15000;
+  let watchlistId = null;
+  let allWatchlists = [];
+  let authToken = localStorage.getItem("auth_token");
+  let currentProfile = null;
+  let authMode = "login"; // or "register"
+  let sortMode = localStorage.getItem("sort_mode") || "change";
+  const expandedSymbols = new Set();
+  const notifiedSymbols = new Set();
+
+  function authHeaders() {
+    return { Authorization: `Bearer ${authToken}` };
+  }
+
+  // --- Auth gate -------------------------------------------------------
+
+  function showAuthGate() {
+    document.getElementById("auth-gate").style.display = "block";
+    document.getElementById("app-content").style.display = "none";
+  }
+
+  function showApp() {
+    document.getElementById("auth-gate").style.display = "none";
+    document.getElementById("app-content").style.display = "block";
+    document.getElementById("account-name").textContent = `👤 ${currentProfile.name}`;
+  }
+
+  function setAuthMode(mode) {
+    authMode = mode;
+    document.getElementById("auth-error").textContent = "";
+    if (mode === "login") {
+      document.getElementById("auth-title").textContent = "Log in";
+      document.getElementById("auth-submit-btn").textContent = "Log in";
+      document.getElementById("auth-toggle").innerHTML = `Don't have an account? <a id="auth-toggle-link">Register</a>`;
+    } else {
+      document.getElementById("auth-title").textContent = "Create an account";
+      document.getElementById("auth-submit-btn").textContent = "Register";
+      document.getElementById("auth-toggle").innerHTML = `Already have an account? <a id="auth-toggle-link">Log in</a>`;
+    }
+    document.getElementById("auth-toggle-link").addEventListener("click", () => {
+      setAuthMode(mode === "login" ? "register" : "login");
+    });
+  }
+
+  document.getElementById("auth-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = document.getElementById("auth-name").value.trim();
+    const password = document.getElementById("auth-password").value;
+    const errorEl = document.getElementById("auth-error");
+    errorEl.textContent = "";
+    if (!name || !password) return;
+
+    const endpoint = authMode === "login" ? "/auth/login" : "/auth/register";
+    try {
+      const res = await fetch(`${API_BASE}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, password }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        errorEl.textContent = body.detail || `Something went wrong (status ${res.status})`;
+        return;
+      }
+      authToken = body.token;
+      currentProfile = body.profile;
+      localStorage.setItem("auth_token", authToken);
+      showApp();
+      await initApp();
+    } catch (err) {
+      errorEl.textContent = `Could not reach the backend: ${err.message}`;
+    }
+  });
+
+  document.getElementById("logout-link").addEventListener("click", () => {
+    authToken = null;
+    currentProfile = null;
+    localStorage.removeItem("auth_token");
+    setAuthMode("login");
+    showAuthGate();
+  });
+
+  async function tryResumeSession() {
+    if (!authToken) {
+      showAuthGate();
+      return false;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/auth/me`, { headers: authHeaders() });
+      if (!res.ok) {
+        localStorage.removeItem("auth_token");
+        authToken = null;
+        showAuthGate();
+        return false;
+      }
+      currentProfile = await res.json();
+      showApp();
+      return true;
+    } catch (err) {
+      document.getElementById("auth-error").textContent = `Could not reach the backend: ${err.message}`;
+      showAuthGate();
+      return false;
+    }
+  }
+
+  // --- Watchlists --------------------------------------------------------
+
+  async function initWatchlists() {
+    let res;
+    try {
+      res = await fetch(`${API_BASE}/watchlists/`, { headers: authHeaders() });
+    } catch (err) {
+      document.getElementById("status").textContent = "Could not reach the backend — is it running on :8000?";
+      return;
+    }
+    if (!res.ok) {
+      document.getElementById("status").textContent = `Backend returned an error (${res.status}) loading watchlists.`;
+      return;
+    }
+
+    allWatchlists = await res.json();
+
+    if (allWatchlists.length === 0) {
+      const created = await createWatchlistRequest("My Watchlist");
+      allWatchlists = [created];
+    }
+
+    const remembered = localStorage.getItem(`active_watchlist_id:${currentProfile.id}`);
+    const stillExists = allWatchlists.find((w) => w.id === remembered);
+    watchlistId = stillExists ? remembered : allWatchlists[0].id;
+
+    renderTabs();
+    await loadView();
+  }
+
+  async function createWatchlistRequest(name) {
+    const res = await fetch(`${API_BASE}/watchlists/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ name }),
+    });
+    return res.json();
+  }
+
+  function renderTabs() {
+    const container = document.getElementById("tabs");
+    container.innerHTML = "";
+
+    for (const wl of allWatchlists) {
+      const tab = document.createElement("div");
+      tab.className = "tab" + (wl.id === watchlistId ? " active" : "");
+      tab.innerHTML = `<span>${wl.name}</span><span class="tab-delete" data-id="${wl.id}">✕</span>`;
+
+      tab.addEventListener("click", (e) => {
+        if (e.target.closest(".tab-delete")) return;
+        watchlistId = wl.id;
+        localStorage.setItem(`active_watchlist_id:${currentProfile.id}`, watchlistId);
+        renderTabs();
+        loadView();
+      });
+
+      container.appendChild(tab);
+    }
+
+    container.querySelectorAll(".tab-delete").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.id;
+        const wl = allWatchlists.find((w) => w.id === id);
+
+        if (allWatchlists.length === 1) {
+          alert("You need at least one watchlist — create another before deleting this one.");
+          return;
+        }
+        if (!confirm(`Delete "${wl.name}" and everything in it?`)) return;
+
+        try {
+          const delRes = await fetch(`${API_BASE}/watchlists/${id}`, { method: "DELETE", headers: authHeaders() });
+          if (!delRes.ok) {
+            alert(`Delete failed (status ${delRes.status}). Check the backend terminal for details.`);
+            return;
+          }
+        } catch (err) {
+          alert(`Delete failed — could not reach the backend: ${err.message}`);
+          return;
+        }
+
+        allWatchlists = allWatchlists.filter((w) => w.id !== id);
+        if (watchlistId === id) {
+          watchlistId = allWatchlists[0].id;
+          localStorage.setItem(`active_watchlist_id:${currentProfile.id}`, watchlistId);
+        }
+        renderTabs();
+        loadView();
+      });
+    });
+
+    const addBtn = document.createElement("button");
+    addBtn.className = "tab-add";
+    addBtn.textContent = "+ new list";
+    addBtn.addEventListener("click", async () => {
+      const name = prompt("Name for the new watchlist:", "New Watchlist");
+      if (!name) return;
+      const created = await createWatchlistRequest(name);
+      allWatchlists.push(created);
+      watchlistId = created.id;
+      localStorage.setItem(`active_watchlist_id:${currentProfile.id}`, watchlistId);
+      renderTabs();
+      loadView();
+    });
+    container.appendChild(addBtn);
+  }
+
+  function fmtPrice(p) {
+    if (p === null || p === undefined) return "—";
+    return p.toFixed(2);
+  }
+
+  function setupSortControls() {
+    const buttons = { alpha: document.getElementById("sort-alpha"), change: document.getElementById("sort-change") };
+    function refreshActiveState() {
+      buttons.alpha.classList.toggle("active", sortMode === "alpha");
+      buttons.change.classList.toggle("active", sortMode === "change");
+    }
+    refreshActiveState();
+    for (const [mode, btn] of Object.entries(buttons)) {
+      btn.addEventListener("click", () => {
+        sortMode = mode;
+        localStorage.setItem("sort_mode", sortMode);
+        refreshActiveState();
+        loadView();
+      });
+    }
+  }
+
+  function applySort(rows) {
+    const sorted = [...rows];
+    if (sortMode === "alpha") {
+      sorted.sort((a, b) => a.symbol.localeCompare(b.symbol));
+    } else {
+      // Sort by the backend's combined attention score (price + volume +
+      // 52-week proximity), not just raw price delta - a symbol can rank
+      // high purely on unusual volume even with a small price move.
+      sorted.sort((a, b) => (b.attention_score || 0) - (a.attention_score || 0));
+    }
+    return sorted;
+  }
+
+  function fmtDelta(d) {
+    if (d === null || d === undefined) return "first view";
+    const sign = d > 0 ? "+" : "";
+    return `${sign}${d.toFixed(2)}%`;
+  }
+
+  function fmtOrDash(v) {
+    return v === null || v === undefined ? "—" : fmtPrice(v);
+  }
+
+  // Builds an SVG line chart from {price, fetched_at} points, with several
+  // evenly-spaced price labels + gridlines on the y-axis and several
+  // evenly-spaced timestamp labels on the x-axis - not just the two
+  // endpoints, so the chart reads like a real chart rather than a sparkline
+  // with two numbers slapped on it. No external charting library so the
+  // demo doesn't depend on internet access.
+  function buildSparkline(points) {
+    if (!points || points.length < 2) {
+      return `<div class="detail-item"><span class="label">chart</span><span class="value dim">not enough history yet</span></div>`;
+    }
+    const w = 580, h = 160;
+    const padLeft = 62, padRight = 12, padTop = 14, padBottom = 26;
+    const plotW = w - padLeft - padRight;
+    const plotH = h - padTop - padBottom;
+    const Y_TICKS = 4; // 5 labels (0..4), consistent intervals
+    const X_TICKS = 4; // 5 labels (0..4), consistent intervals
+
+    const prices = points.map((p) => p.price);
+    const min = Math.min(...prices), max = Math.max(...prices);
+    const range = max - min || 1;
+    const stepX = plotW / (points.length - 1);
+
+    const coords = prices.map((p, i) => {
+      const x = padLeft + i * stepX;
+      const y = padTop + plotH - ((p - min) / range) * plotH;
+      return [x, y];
+    });
+
+    const path = coords.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+    const lastUp = prices[prices.length - 1] >= prices[0];
+    const strokeColor = lastUp ? "#00D8A3" : "#FF6B5E";
+
+    const fmtTime = (iso) => {
+      const d = new Date(iso + "Z");
+      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    };
+
+    // Y-axis: evenly spaced price labels + faint gridlines, min at bottom
+    // to max at top - not just the two endpoints.
+    let yAxis = "";
+    for (let i = 0; i <= Y_TICKS; i++) {
+      const value = min + (range * i) / Y_TICKS;
+      const y = padTop + plotH - (i / Y_TICKS) * plotH;
+      yAxis += `<line x1="${padLeft}" y1="${y.toFixed(1)}" x2="${padLeft + plotW}" y2="${y.toFixed(1)}" stroke="var(--line)" stroke-width="1" opacity="0.5" />`;
+      yAxis += `<text class="axis-label" x="${padLeft - 6}" y="${(y + 3).toFixed(1)}" text-anchor="end">${value.toFixed(2)}</text>`;
+    }
+
+    // X-axis: evenly spaced timestamps across the actual data range, at
+    // consistent intervals rather than only showing the first/last point.
+    let xAxis = "";
+    for (let i = 0; i <= X_TICKS; i++) {
+      const idx = Math.round((i / X_TICKS) * (points.length - 1));
+      const x = padLeft + idx * stepX;
+      xAxis += `<line x1="${x.toFixed(1)}" y1="${padTop}" x2="${x.toFixed(1)}" y2="${padTop + plotH}" stroke="var(--line)" stroke-width="1" opacity="0.35" />`;
+      const anchor = i === 0 ? "start" : i === X_TICKS ? "end" : "middle";
+      xAxis += `<text class="axis-label" x="${x.toFixed(1)}" y="${h - 6}" text-anchor="${anchor}">${fmtTime(points[idx].fetched_at)}</text>`;
+    }
+
+    return `
+      <div class="sparkline-wrap">
+        <svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none">
+          ${yAxis}
+          ${xAxis}
+          <line x1="${padLeft}" y1="${padTop}" x2="${padLeft}" y2="${padTop + plotH}" stroke="var(--line)" stroke-width="1.5" />
+          <line x1="${padLeft}" y1="${padTop + plotH}" x2="${padLeft + plotW}" y2="${padTop + plotH}" stroke="var(--line)" stroke-width="1.5" />
+          <path d="${path}" fill="none" stroke="${strokeColor}" stroke-width="1.5" />
+        </svg>
+      </div>
+    `;
+  }
+
+  async function renderDetailRow(symbol, container) {
+    container.innerHTML = `<span class="value dim">Loading chart…</span>`;
+    try {
+      const res = await fetch(`${API_BASE}/symbols/${symbol}/history?limit=100`);
+      const history = res.ok ? await res.json() : [];
+      container.innerHTML = buildSparkline(history);
+    } catch {
+      container.innerHTML = `<span class="value dim">Could not load chart</span>`;
+    }
+  }
+
+  function freshnessDot(freshness) {
+    const label = { live: "live", delayed: "delayed", stale: "stale / cached" }[freshness] || freshness;
+    return `<span class="freshness-dot ${freshness}" title="${label}"></span>`;
+  }
+
+  function renderRows(rows) {
+    const tbody = document.getElementById("rows");
+    const emptyMsg = document.getElementById("empty-msg");
+    tbody.innerHTML = "";
+
+    if (rows.length === 0) {
+      emptyMsg.style.display = "block";
+      return;
+    }
+    emptyMsg.style.display = "none";
+
+    const sortedRows = applySort(rows);
+
+    for (const r of sortedRows) {
+      const tr = document.createElement("tr");
+      tr.className = "toggle-row";
+
+      // The one bold visual device: a left-edge accent bar whose color and
+      // intensity are driven directly by the attention score, so "what
+      // deserves your attention" is visible at a glance, not just readable
+      // in the numbers - this is the product's actual philosophy made
+      // literally visible, not decoration for its own sake.
+      const barColor = r.delta_since_last_view_pct < 0 ? "255,107,94" : "0,216,163";
+      const barOpacity = Math.max(r.attention_score / 100, 0.06);
+      tr.style.borderLeftColor = `rgba(${barColor},${barOpacity.toFixed(2)})`;
+
+      const deltaClass = r.delta_since_last_view_pct > 0 ? "up"
+        : r.delta_since_last_view_pct < 0 ? "down" : "";
+
+      let flags = "";
+      if (r.is_meaningful_change) flags += `<span class="flag meaningful">attention ${r.attention_score}</span>`;
+      if (r.is_volume_spike) flags += `<span class="flag volume">vol ${r.volume_ratio ? r.volume_ratio.toFixed(1) + "x" : "spike"}</span>`;
+      if (r.is_significant_vs_prev_close) flags += `<span class="flag prevclose">${r.pct_change_vs_prev_close > 0 ? "+" : ""}${r.pct_change_vs_prev_close.toFixed(2)}% vs close</span>`;
+      if (r.is_stale) flags += `<span class="flag stale">stale</span>`;
+
+      tr.innerHTML = `
+        <td class="symbol">${freshnessDot(r.freshness)}${r.symbol}${flags}</td>
+        <td class="num price">${r.has_data ? fmtPrice(r.price) : "no data"}</td>
+        <td class="num delta ${deltaClass}">${fmtDelta(r.delta_since_last_view_pct)}</td>
+        <td style="color: var(--muted); font-size: 12px;">details ▾</td>
+        <td><button class="remove-btn" data-id="${r.item_id}">remove</button></td>
+      `;
+      tbody.appendChild(tr);
+
+      const isOpen = expandedSymbols.has(r.symbol);
+      const triggersHtml = (r.attention_triggers && r.attention_triggers.length)
+        ? r.attention_triggers.map((t) => `<div class="trigger-item">• ${t}</div>`).join("")
+        : `<div class="dim">No active triggers right now</div>`;
+
+      const detailTr = document.createElement("tr");
+      detailTr.className = "detail-row";
+      detailTr.style.display = isOpen ? "table-row" : "none";
+      detailTr.innerHTML = `
+        <td colspan="5">
+          <div class="detail-grid">
+            <div class="detail-item"><div class="label">open</div><div class="value">${fmtOrDash(r.day_open)}</div></div>
+            <div class="detail-item"><div class="label">day high</div><div class="value">${fmtOrDash(r.day_high)}</div></div>
+            <div class="detail-item"><div class="label">day low</div><div class="value">${fmtOrDash(r.day_low)}</div></div>
+            <div class="detail-item"><div class="label">analyst 1yr target</div><div class="value">${fmtOrDash(r.target_mean_price)}</div></div>
+            <div class="detail-item"><div class="label">52-week high</div><div class="value">${fmtOrDash(r.year_high)}</div></div>
+            <div class="detail-item"><div class="label">52-week low</div><div class="value">${fmtOrDash(r.year_low)}</div></div>
+            <div class="detail-item"><div class="label">volume</div><div class="value">${r.volume ? r.volume.toLocaleString() : "—"}</div></div>
+            <div class="detail-item"><div class="label">avg volume (3mo)</div><div class="value">${r.avg_volume ? Math.round(r.avg_volume).toLocaleString() : "—"}</div></div>
+            <div class="detail-item"><div class="label">vs avg volume</div><div class="value ${r.is_volume_spike ? '' : 'dim'}">${r.volume_ratio ? r.volume_ratio.toFixed(2) + "x" : "—"}</div></div>
+            <div class="detail-item"><div class="label">vs previous close</div><div class="value ${r.is_significant_vs_prev_close ? '' : 'dim'}">${r.pct_change_vs_prev_close !== null && r.pct_change_vs_prev_close !== undefined ? (r.pct_change_vs_prev_close > 0 ? "+" : "") + r.pct_change_vs_prev_close.toFixed(2) + "%" : "—"}</div></div>
+          </div>
+          <div class="triggers">
+            <div class="label">attention score: ${r.attention_score}/100</div>
+            ${triggersHtml}
+          </div>
+          <div class="chart-container"></div>
+        </td>
+      `;
+      tbody.appendChild(detailTr);
+
+      if (isOpen) {
+        renderDetailRow(r.symbol, detailTr.querySelector(".chart-container"));
+      }
+
+      tr.addEventListener("click", (e) => {
+        if (e.target.closest(".remove-btn")) return;
+        const nowHidden = detailTr.style.display !== "none";
+        detailTr.style.display = nowHidden ? "none" : "table-row";
+        if (nowHidden) {
+          expandedSymbols.delete(r.symbol);
+        } else {
+          expandedSymbols.add(r.symbol);
+          renderDetailRow(r.symbol, detailTr.querySelector(".chart-container"));
+        }
+      });
+    }
+
+    tbody.querySelectorAll(".remove-btn").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        await fetch(`${API_BASE}/watchlists/${watchlistId}/items/${btn.dataset.id}`, {
+          method: "DELETE",
+          headers: authHeaders(),
+        });
+        loadView();
+      });
+    });
+  }
+
+  // --- Notifications -------------------------------------------------
+
+  function maybeNotify(rows) {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    for (const r of rows) {
+      if (r.is_meaningful_change && !notifiedSymbols.has(r.symbol + r.delta_since_last_view_pct)) {
+        notifiedSymbols.add(r.symbol + r.delta_since_last_view_pct);
+        new Notification(`${r.symbol} — attention score ${r.attention_score}`, {
+          body: `Now ₹${fmtPrice(r.price)}. ${(r.attention_triggers || []).join(" ")}`,
+        });
+      }
+    }
+  }
+
+  function setupNotifications() {
+    if (typeof Notification === "undefined") return;
+    const banner = document.getElementById("notif-banner");
+    if (Notification.permission === "default") {
+      banner.style.display = "block";
+    }
+    document.getElementById("notif-enable-btn").addEventListener("click", async () => {
+      await Notification.requestPermission();
+      banner.style.display = "none";
+    });
+  }
+
+  async function loadView() {
+    if (!watchlistId) return;
+    const res = await fetch(`${API_BASE}/watchlists/${watchlistId}/view`, { headers: authHeaders() });
+    if (!res.ok) {
+      document.getElementById("status").textContent = res.status === 401
+        ? "Session expired — please log in again."
+        : `Could not reach the backend (status ${res.status}).`;
+      if (res.status === 401) {
+        localStorage.removeItem("auth_token");
+        authToken = null;
+        showAuthGate();
+      }
+      return;
+    }
+    const rows = await res.json();
+    renderRows(rows);
+    maybeNotify(rows);
+    document.getElementById("sub").textContent = `${rows.length} symbol${rows.length === 1 ? "" : "s"} tracked`;
+    document.getElementById("status").textContent = `Last refreshed ${new Date().toLocaleTimeString()}`;
+  }
+
+  document.getElementById("add-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const input = document.getElementById("symbol-input");
+    const symbol = input.value.trim();
+    if (!symbol) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/watchlists/${watchlistId}/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ symbol }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert(body.detail || `Could not add ${symbol} (status ${res.status})`);
+        return;
+      }
+    } catch (err) {
+      alert(`Could not reach the backend: ${err.message}`);
+      return;
+    }
+
+    input.value = "";
+    loadView();
+  });
+
+  async function initApp() {
+    setupSortControls();
+    await initWatchlists();
+    setInterval(loadView, REFRESH_MS);
+  }
+
+  (async function init() {
+    setupNotifications();
+    setAuthMode("login");
+    const resumed = await tryResumeSession();
+    if (resumed) {
+      await initApp();
+    }
+  })();
+</script>
+</body>
+</html>
