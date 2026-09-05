@@ -2,6 +2,10 @@
 
 A watchlist that tracks not just prices, but what's *actually* changed since you last looked — and surfaces what deserves your attention now, not just a raw list of numbers.
 
+## Architecture
+
+![Smart Market Watchlist architecture diagram: browser frontend talks to a FastAPI backend over REST with JWT auth; the backend reads and writes PostgreSQL for durable storage and Redis for hot-path price reads; a separate APScheduler job polls Yahoo Finance in two batched requests per cycle and writes fresh data into both PostgreSQL and Redis.](docs/architecture.svg)
+
 ## Stack
 
 - **Backend**: FastAPI + SQLModel (Python)
@@ -139,6 +143,8 @@ All endpoints except registration, login, and symbol history require `Authorizat
 
 ## Testing without live market data
 
-`seed_demo_data.py` (in `backend/`) writes realistic synthetic data directly to Postgres and Redis — the same places the real scheduler writes to — without touching any live-fetch code. Useful when the market's closed or Yahoo is unavailable and you need to verify the attention score, volume spike, "vs previous close", and freshness logic actually work. Run it with `python seed_demo_data.py` from `backend/` (venv active, Postgres/Redis running); it seeds every symbol currently in any watchlist, cycling through four scenarios so every flag type shows at least once: a big price move, a volume spike, a near-52-week-high, and a quiet baseline with nothing flagged.
+**The app queries real, live market data from Yahoo Finance by default** — this section documents an optional test utility, not how the app normally works.
 
-This data is temporary by design — the next real scheduler poll overwrites the cache with whatever Yahoo actually returns. For a longer testing window, temporarily raise `POLL_INTERVAL_SECONDS` in `.env` before running it.
+`seed_demo_data.py` (in `backend/`) writes realistic synthetic data directly to Postgres and Redis — the same places the real scheduler writes to — without touching any live-fetch code. It exists purely so the attention score, volume spike, "vs previous close", and freshness logic can be verified deterministically (e.g. when the market is closed and prices genuinely aren't moving, or during offline development) — the same reason any engineering team builds test fixtures instead of depending on a live third-party API to test their own logic. Run it with `python seed_demo_data.py` from `backend/`; it seeds every symbol currently in any watchlist, cycling through four scenarios so every flag type is demonstrable on demand: a big price move, a volume spike, a near-52-week-high, and a quiet baseline with nothing flagged.
+
+This data is temporary and clearly separated from the real pipeline — every seeded row is tagged `source="test_seed"` in the database, and the very next real scheduler poll overwrites the cache with whatever Yahoo actually returns. For a longer testing window, temporarily raise `POLL_INTERVAL_SECONDS` in `.env` before running it.
