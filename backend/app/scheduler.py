@@ -62,6 +62,16 @@ def _handle_fetch_failure(session: Session, symbol: str):
     if last_good:
         _cache_quote(symbol, last_good.price, last_good.volume, last_good.fetched_at, is_stale=True)
 
+    # Enrichment (OHLC/52-week/target/avg volume) has its own, longer TTL and
+    # previously was ONLY refreshed on a successful fetch - meaning a
+    # prolonged outage let it silently expire even while the price cache
+    # stayed alive via the line above. Re-stamping it here (same value, same
+    # TTL) keeps whatever we last knew alive for as long as the price
+    # fallback keeps firing, instead of the two caches drifting out of sync.
+    existing_enrichment = redis_client.get(enrichment_key(symbol))
+    if existing_enrichment:
+        redis_client.set(enrichment_key(symbol), existing_enrichment, ex=ENRICHMENT_TTL_SECONDS)
+
 
 def _refresh_targets(symbols: list[str]) -> dict:
     """Analyst targets have no batch endpoint, so this is the one remaining
